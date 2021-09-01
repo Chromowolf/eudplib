@@ -1,0 +1,104 @@
+use std::str::FromStr;
+use crate::ast::{Expr, UnOpcode, BinOpcode};
+
+use lalrpop_util::ErrorRecovery;
+
+grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, &'static str>>);
+
+pub Exprs = Comma<Expr>;
+
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+Expr: Box<Expr> = {
+    LogicAndExpr,
+    LogicOrExpr,
+    CompExpr,
+}
+
+Tier<Op, NextTier>: Box<Expr> = {
+    Tier<Op, NextTier> Op NextTier => Box::new(Expr::BinOp(<>)),
+    NextTier Op NextTier => Box::new(Expr::BinOp(<>)),
+};
+
+LogicAndExpr = Tier<LogicAndOp, CompExpr>;
+LogicOrExpr = Tier<LogicOrOp, CompExpr>;
+LogicAndOp: BinOpcode = "&&" => BinOpcode::LogicAnd;
+LogicOrOp: BinOpcode = "||" => BinOpcode::LogicOr;
+
+CompExpr: Box<Expr> = {
+    MathExpr CompOp MathExpr => Box::new(Expr::BinOp(<>)),
+    MathExpr,
+}
+MathExpr: Box<Expr> = {
+    MathTerm,
+    BitAndExpr,
+    BitOrExpr,
+    BitXorExpr,
+    BitShiftExpr,
+}
+CompOp: BinOpcode = {
+    "==" => BinOpcode::Equal,
+    "!=" => BinOpcode::NotEqual,
+    "<" => BinOpcode::LessThan,
+    ">" => BinOpcode::GreaterThan,
+    "<=" => BinOpcode::LessThanEqual,
+    ">=" => BinOpcode::GreaterThanEqual,
+}
+
+BitAndExpr = Tier<BitAndOp, UnTerm>;
+BitOrExpr = Tier<BitOrOp, UnTerm>;
+BitXorExpr = Tier<BitXorOp, UnTerm>;
+BitShiftExpr: Box<Expr> = UnTerm BitShiftOp UnTerm => Box::new(Expr::BinOp(<>));
+BitAndOp: BinOpcode = "&" => BinOpcode::BitAnd;
+BitOrOp: BinOpcode = "|" => BinOpcode::BitOr;
+BitXorOp: BinOpcode = "^" => BinOpcode::BitXor;
+BitShiftOp: BinOpcode = {
+    "<<" => BinOpcode::BitLsh,
+    ">>" => BinOpcode::BitRsh,
+}
+
+MathTerm: Box<Expr> = {
+    MathTerm TermOp Factor => Box::new(Expr::BinOp(<>)),
+    Factor
+}
+
+TermOp: BinOpcode = {
+    "+" => BinOpcode::Add,
+    "-" => BinOpcode::Sub,
+}
+
+Factor: Box<Expr> = {
+    Factor FactorOp UnTerm => Box::new(Expr::BinOp(<>)),
+    UnTerm
+}
+FactorOp: BinOpcode = {
+    "*" => BinOpcode::Mul,
+    "/" => BinOpcode::Div,
+    "%" => BinOpcode::Mod,
+}
+
+UnTerm: Box<Expr> = {
+    UnOp UnTerm => Box::new(Expr::UnOp(<>)),
+    Term
+}
+
+UnOp: UnOpcode = {
+    "-" => UnOpcode::Negate,
+    "!" => UnOpcode::Not,
+}
+
+Term: Box<Expr> = {
+    Num => Box::new(Expr::Number(<>)),
+    "(" <Expr> ")",
+    ! => { errors.push(<>); Box::new(Expr::Error) }
+};
+
+Num: i32 = r"[0-9]+" => i32::from_str(<>).unwrap();
