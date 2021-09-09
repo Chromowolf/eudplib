@@ -5,7 +5,32 @@ use lalrpop_util::ErrorRecovery;
 
 grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, &'static str>>);
 
+pub Epscript = ModItem*;
+
+ModItem: () = {
+    ItemConst,
+    ItemVar,
+    BlockItem,
+    ItemImport,
+}
+ItemConst: () = "const" identifier = Expr ";";
+ItemVar: () = "var" identifier = Expr ";";
+
 pub Exprs = Comma<Expr>;
+
+ItemImport: () = "import" ViewPath ";";
+ViewPath: () = {
+    Path "as" Identifier,
+}
+Path: () = {
+    "."* Identifier,
+    Path "." Identifier,
+}
+
+BlockItem: () {
+    ItemFn,
+    ItemObject,
+}
 
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
